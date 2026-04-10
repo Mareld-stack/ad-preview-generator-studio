@@ -441,6 +441,39 @@ body {
   border-color: var(--ow-orange);
   box-shadow: 0 0 0 4px rgba(255,73,0,0.08);
 }
+.inline-field {
+  margin-top: 12px;
+}
+.inline-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  color: #6a635e;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.inline-field input {
+  width: 100%;
+  border: 1px solid rgba(17,17,17,0.12);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ow-black);
+  font: inherit;
+  padding: 12px 14px;
+}
+.inline-field input:focus {
+  outline: none;
+  border-color: var(--ow-orange);
+  box-shadow: 0 0 0 4px rgba(255,73,0,0.08);
+}
+.inline-field small {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #667180;
+  line-height: 1.45;
+}
 
 .company-input {
   width: 100%;
@@ -730,6 +763,11 @@ body {
             <div class="dz-icon">↑</div>
             <p>Drop images here or click to choose files</p>
             <p class="hint">Example filenames: A-1.1-..., B-4_5-..., A-9.16-... so the correct format can be matched automatically.</p>
+          </div>
+          <div class="inline-field">
+            <label for="sharepointUrlInput">SharePoint URL</label>
+            <input type="url" id="sharepointUrlInput" placeholder="Paste a direct SharePoint file link here">
+            <small>Use this field if your files live in SharePoint. Direct browser-accessible links are the safest option in this local version.</small>
           </div>
           <div class="tags" id="creativeTags"></div>
         </div>
