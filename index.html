@@ -474,6 +474,26 @@ body {
   color: #667180;
   line-height: 1.45;
 }
+.inline-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.inline-btn {
+  appearance: none;
+  border: 1px solid rgba(17,17,17,0.1);
+  background: #fff;
+  color: var(--ow-black);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.inline-btn:hover {
+  border-color: rgba(255,73,0,0.35);
+  color: var(--ow-orange);
+}
 
 .company-input {
   width: 100%;
@@ -768,6 +788,9 @@ body {
             <label for="sharepointUrlInput">SharePoint URL</label>
             <input type="url" id="sharepointUrlInput" placeholder="Paste a direct SharePoint file link here">
             <small>Use this field if your files live in SharePoint. Direct browser-accessible links are the safest option in this local version.</small>
+            <div class="inline-actions">
+              <button class="inline-btn" id="importCreativeUrlBtn" type="button">Import image from URL</button>
+            </div>
           </div>
           <div class="tags" id="creativeTags"></div>
         </div>
@@ -790,6 +813,9 @@ body {
             <label for="copySharepointUrlInput">Copy document SharePoint URL</label>
             <input type="url" id="copySharepointUrlInput" placeholder="Paste a direct SharePoint link to the DOCX file here">
             <small>Use this field for SharePoint-hosted copy documents. Direct file links are the most reliable option in this local browser-based version.</small>
+            <div class="inline-actions">
+              <button class="inline-btn" id="importCopyUrlBtn" type="button">Import copy from URL</button>
+            </div>
           </div>
           <div class="copy-found" id="copyFound">
             <h3>Imported copy variants</h3>
@@ -1215,6 +1241,80 @@ function loadImg(src) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
 }
 
+function resolveSharePointDownloadUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes('sharepoint.com')) return url;
+    if (!parsed.searchParams.has('download')) parsed.searchParams.set('download', '1');
+    if (!parsed.searchParams.has('web')) parsed.searchParams.delete('web');
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+function guessNameFromUrl(url, fallback) {
+  try {
+    const parsed = new URL(url);
+    const last = parsed.pathname.split('/').filter(Boolean).pop() || '';
+    return decodeURIComponent(last) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function fetchRemoteBlob(url) {
+  const resolvedUrl = resolveSharePointDownloadUrl(url);
+  const res = await fetch(resolvedUrl, { credentials: 'include' });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  const contentType = res.headers.get('content-type') || '';
+  const blob = await res.blob();
+  return { blob, contentType, resolvedUrl };
+}
+
+async function addCreativeFileLike(fileLike, sourceName) {
+  const dataUrl = await toDataUrl(fileLike);
+  const img = await loadImg(dataUrl);
+  let ratio = parseRatio(sourceName);
+  if (ratio === 'unknown') ratio = inferRatioFromDimensions(img);
+  const version = parseVersion(sourceName);
+  S.creatives.push({
+    version,
+    ratio,
+    dataUrl,
+    filename: sourceName,
+    img,
+    exportKey: getCreativeExportKey({ version, filename: sourceName }, S.creatives.length),
+  });
+  renderCreativeTags();
+  refreshDashboard();
+}
+
+async function importCreativeFromUrl(url) {
+  const { blob, contentType, resolvedUrl } = await fetchRemoteBlob(url);
+  if (!contentType.startsWith('image/')) {
+    throw new Error('The URL did not return an image file.');
+  }
+  const name = guessNameFromUrl(resolvedUrl, 'sharepoint-image');
+  const fileLike = new File([blob], name, { type: contentType || blob.type || 'image/png' });
+  await addCreativeFileLike(fileLike, name);
+}
+
+async function importCopyFromUrl(url) {
+  const { blob, contentType, resolvedUrl } = await fetchRemoteBlob(url);
+  const name = guessNameFromUrl(resolvedUrl, 'sharepoint-copy.docx');
+  const looksLikeDocx = contentType.includes('wordprocessingml') || name.toLowerCase().endsWith('.docx');
+  if (!looksLikeDocx) {
+    throw new Error('The URL did not return a DOCX file.');
+  }
+  const fileLike = new File([blob], name.endsWith('.docx') ? name : `${name}.docx`, {
+    type: contentType || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  S.copies = await parseDocx(fileLike);
+  renderCopyCards();
+  refreshDashboard();
+}
+
 function wrapText(ctx, text, x, y, maxW, lh, maxLines = 99) {
   if (!text) return y;
   const words = text.split(' ');
@@ -1589,6 +1689,36 @@ document.querySelector('.side-panel').addEventListener('input', e => {
   if (checkbox.checked) targetSet.add(value);
   else targetSet.delete(value);
   refreshDashboard();
+});
+
+document.getElementById('importCreativeUrlBtn').addEventListener('click', async () => {
+  const url = document.getElementById('sharepointUrlInput').value.trim();
+  if (!url) {
+    setStatus('Paste an image URL first.', 'err');
+    return;
+  }
+  setStatus('Trying to import image from URL…');
+  try {
+    await importCreativeFromUrl(url);
+    setStatus('Image imported from URL.', 'ok');
+  } catch (e) {
+    setStatus(`Could not import image URL: ${e.message}. SharePoint may require a direct download link or an authenticated browser session.`, 'err');
+  }
+});
+
+document.getElementById('importCopyUrlBtn').addEventListener('click', async () => {
+  const url = document.getElementById('copySharepointUrlInput').value.trim();
+  if (!url) {
+    setStatus('Paste a copy document URL first.', 'err');
+    return;
+  }
+  setStatus('Trying to import copy document from URL…');
+  try {
+    await importCopyFromUrl(url);
+    setStatus(`Imported ${S.copies.length} copy version(s) from URL.`, 'ok');
+  } catch (e) {
+    setStatus(`Could not import copy URL: ${e.message}. SharePoint may require a direct download link or an authenticated browser session.`, 'err');
+  }
 });
 
 function checkReady() {
