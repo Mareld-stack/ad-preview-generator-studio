@@ -383,6 +383,33 @@ body {
   letter-spacing: 0.1em;
   margin-bottom: 10px;
 }
+.copy-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.copy-remove-btn {
+  appearance: none;
+  border: 1px solid rgba(17,17,17,0.1);
+  background: #fff;
+  color: var(--ow-black);
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+}
+.copy-remove-btn:hover {
+  color: var(--ow-orange);
+  border-color: rgba(255,73,0,0.35);
+}
 .copy-card .field { font-size: 13px; color: #465260; margin-bottom: 6px; line-height: 1.55; }
 .copy-card .field b { color: #0f1722; }
 .copy-card .field label {
@@ -541,6 +568,36 @@ body {
   color: var(--ow-ink-soft);
   text-align: center;
   line-height: 1.45;
+}
+.filter-group {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.filter-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fff7f2;
+  border: 1px solid rgba(17,17,17,0.06);
+}
+.filter-option input {
+  margin-top: 3px;
+  accent-color: var(--ow-orange);
+}
+.filter-option strong {
+  display: block;
+  font-size: 13px;
+  color: var(--ow-black);
+}
+.filter-option span {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: #667180;
+  line-height: 1.4;
 }
 
 @media (max-width: 1080px) {
@@ -761,6 +818,65 @@ body {
             </div>
           </div>
         </div>
+
+        <div class="summary-card">
+          <span class="eyebrow" style="color:#60707e;">Export Options</span>
+          <strong>Choose what should be produced</strong>
+          <p>Use these options to exclude placements or image formats before export. The preview count updates automatically.</p>
+          <div class="filter-group" id="placementFilters">
+            <label class="filter-option">
+              <input type="checkbox" data-filter-type="placement" value="Facebook_Feed" checked>
+              <div>
+                <strong>Facebook Feed</strong>
+                <span>Create Facebook feed previews for supported formats.</span>
+              </div>
+            </label>
+            <label class="filter-option">
+              <input type="checkbox" data-filter-type="placement" value="Instagram_Feed" checked>
+              <div>
+                <strong>Instagram Feed</strong>
+                <span>Create Instagram feed previews for supported formats.</span>
+              </div>
+            </label>
+            <label class="filter-option">
+              <input type="checkbox" data-filter-type="placement" value="Instagram_Story" checked>
+              <div>
+                <strong>Instagram Story</strong>
+                <span>Create story previews only for 9:16 assets.</span>
+              </div>
+            </label>
+            <label class="filter-option">
+              <input type="checkbox" data-filter-type="placement" value="LinkedIn_Feed" checked>
+              <div>
+                <strong>LinkedIn Feed</strong>
+                <span>Create LinkedIn feed previews for supported formats.</span>
+              </div>
+            </label>
+          </div>
+          <div class="filter-group" id="formatFilters">
+            <label class="filter-option">
+              <input type="checkbox" data-filter-type="format" value="1:1" checked>
+              <div>
+                <strong>1:1</strong>
+                <span>Square creatives for feed placements.</span>
+              </div>
+            </label>
+            <label class="filter-option">
+              <input type="checkbox" data-filter-type="format" value="4:5" checked>
+              <div>
+                <strong>4:5</strong>
+                <span>Portrait feed creatives for Meta and LinkedIn.</span>
+              </div>
+            </label>
+            <label class="filter-option">
+              <input type="checkbox" data-filter-type="format" value="9:16" checked>
+              <div>
+                <strong>9:16</strong>
+                <span>Story creatives for Instagram Story only.</span>
+              </div>
+            </label>
+          </div>
+        </div>
       </div>
     </aside>
   </div>
@@ -768,7 +884,15 @@ body {
 
 <script>
 // ─── State ───────────────────────────────────────────────
-const S = { creatives: [], copies: [], company: 'Company', logoDataUrl: '', logoImg: null };
+const S = {
+  creatives: [],
+  copies: [],
+  company: 'Company',
+  logoDataUrl: '',
+  logoImg: null,
+  enabledPlacements: new Set(['Facebook_Feed', 'Instagram_Feed', 'Instagram_Story', 'LinkedIn_Feed']),
+  enabledFormats: new Set(['1:1', '4:5', '9:16']),
+};
 const PLATFORM_MATRIX = [
   { id: 'Facebook_Feed', ratios: ['1:1','4:5'] },
   { id: 'Instagram_Feed', ratios: ['1:1','4:5'] },
@@ -789,6 +913,15 @@ function getHandle(name) {
 }
 function getDomain(name) {
   return name.toLowerCase().replace(/\s+/g, '') + '.com';
+}
+function slugify(value = '') {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
 }
 function escapeHtml(value = '') {
   return value
@@ -818,15 +951,7 @@ function renderLogoPreview() {
 }
 
 function countOutputs() {
-  let count = 0;
-  for (const copy of S.copies) {
-    for (const creative of S.creatives) {
-      for (const p of PLATFORM_MATRIX) {
-        if (p.ratios.includes(creative.ratio)) count++;
-      }
-    }
-  }
-  return count;
+  return buildJobs().length;
 }
 
 function uniqueRatios() {
@@ -878,7 +1003,10 @@ function renderCopyCards() {
     const d = document.createElement('div');
     d.className = 'copy-card';
     d.innerHTML = `
-      <div class="variant-label">Variant ${v.variantName}</div>
+      <div class="copy-card-head">
+        <div class="variant-label">Variant ${v.variantName}</div>
+        <button class="copy-remove-btn" data-action="remove-copy" data-copy-index="${index}" title="Remove copy version" aria-label="Remove copy version">×</button>
+      </div>
       <div class="field">
         <label for="copy-headline-${index}">Headline</label>
         <input id="copy-headline-${index}" class="copy-input" data-copy-index="${index}" data-copy-field="headline" value="${escapeHtml(v.headline || '')}">
@@ -908,6 +1036,12 @@ function moveCreative(index, direction) {
 function removeCreative(index) {
   S.creatives.splice(index, 1);
   renderCreativeTags();
+  refreshDashboard();
+}
+
+function removeCopy(index) {
+  S.copies.splice(index, 1);
+  renderCopyCards();
   refreshDashboard();
 }
 
@@ -982,7 +1116,52 @@ function parseRatio(filename) {
 
 function parseVersion(filename) {
   const m = filename.match(/^([A-Z]+)[-_]/i);
-  return m ? m[1].toUpperCase() : '?';
+  return m ? m[1].toUpperCase() : '';
+}
+
+function inferRatioFromDimensions(img) {
+  const ar = img.width / img.height;
+  if (ar >= 1.7) return '9:16-landscape';
+  if (ar >= 0.94 && ar <= 1.06) return '1:1';
+  if (ar >= 0.74 && ar <= 0.86) return '4:5';
+  if (ar >= 0.52 && ar <= 0.63) return '9:16';
+  if (ar < 0.7) return '9:16';
+  return '4:5';
+}
+
+function getCreativeExportKey(creative, index) {
+  const base = creative.version || slugify(creative.filename) || `creative-${index + 1}`;
+  return base;
+}
+
+function buildJobs() {
+  const placements = [
+    { id: 'Facebook_Feed', ratios: ['1:1','4:5'], fn: drawFacebook },
+    { id: 'Instagram_Feed', ratios: ['1:1','4:5'], fn: drawInstagram },
+    { id: 'Instagram_Story', ratios: ['9:16'], fn: drawStory },
+    { id: 'LinkedIn_Feed', ratios: ['1:1','4:5'], fn: drawLinkedIn },
+  ];
+  const jobs = [];
+  const usedNames = new Set();
+  S.copies.forEach((copy, copyIndex) => {
+    S.creatives.forEach((creative, creativeIndex) => {
+      placements.forEach(p => {
+        if (!S.enabledPlacements.has(p.id)) return;
+        if (!p.ratios.includes(creative.ratio)) return;
+        if (!S.enabledFormats.has(creative.ratio)) return;
+        const creativeKey = getCreativeExportKey(creative, creativeIndex);
+        const copyKey = copy.variantName || `Variant${copyIndex + 1}`;
+        let fname = `${creativeKey}-Copy${copyKey}-${p.id}-${creative.ratio.replace(':','x')}.png`;
+        if (usedNames.has(fname)) {
+          const uniqueSuffix = slugify(creative.filename) || `file-${creativeIndex + 1}`;
+          fname = `${creativeKey}-${uniqueSuffix}-Copy${copyKey}-${p.id}-${creative.ratio.replace(':','x')}.png`;
+        }
+        usedNames.add(fname);
+        jobs.push({ copy, creative, p, fname });
+      });
+    });
+  });
+  return jobs;
 }
 
 function toDataUrl(file) {
@@ -1287,20 +1466,24 @@ function dropZone(zoneId, inputId, handler) {
 
 dropZone('creativeZone', 'creativeInput', async files => {
   S.creatives = [];
-  for (const f of files) {
+  for (const [index, f] of files.entries()) {
     if (!f.type.startsWith('image/')) continue;
     const dataUrl = await toDataUrl(f);
     const img = await loadImg(dataUrl);
     let ratio = parseRatio(f.name);
     // If can't detect from name, use actual dimensions
     if (ratio === 'unknown') {
-      const ar = img.width / img.height;
-      if (ar > 1.7) ratio = '9:16-landscape';
-      else if (ar > 0.9 && ar < 1.1) ratio = '1:1';
-      else ratio = '4:5';
+      ratio = inferRatioFromDimensions(img);
     }
     const version = parseVersion(f.name);
-    S.creatives.push({ version, ratio, dataUrl, filename: f.name, img });
+    S.creatives.push({
+      version,
+      ratio,
+      dataUrl,
+      filename: f.name,
+      img,
+      exportKey: getCreativeExportKey({ version, filename: f.name }, index),
+    });
   }
   renderCreativeTags();
   checkReady();
@@ -1344,6 +1527,24 @@ document.getElementById('copyCards').addEventListener('input', e => {
   const index = Number(e.target.dataset.copyIndex);
   if (!field || Number.isNaN(index) || !S.copies[index]) return;
   S.copies[index][field] = e.target.value;
+  refreshDashboard();
+});
+
+document.getElementById('copyCards').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action="remove-copy"]');
+  if (!btn) return;
+  const index = Number(btn.dataset.copyIndex);
+  if (Number.isNaN(index)) return;
+  removeCopy(index);
+});
+
+document.querySelector('.side-panel').addEventListener('input', e => {
+  const checkbox = e.target.closest('[data-filter-type]');
+  if (!checkbox) return;
+  const { filterType, value } = checkbox.dataset;
+  const targetSet = filterType === 'placement' ? S.enabledPlacements : S.enabledFormats;
+  if (checkbox.checked) targetSet.add(value);
+  else targetSet.delete(value);
   refreshDashboard();
 });
 
@@ -1722,28 +1923,10 @@ document.getElementById('genBtn').addEventListener('click', async () => {
   setStepState('stateGenerate', 'active', 'Generating');
   document.getElementById('heroStatus').textContent = 'Generating previews';
 
-  const placements = [
-    { id: 'Facebook_Feed',    ratios: ['1:1','4:5'],  fn: drawFacebook },
-    { id: 'Instagram_Feed',   ratios: ['1:1','4:5'],  fn: drawInstagram },
-    { id: 'Instagram_Story',  ratios: ['9:16'],       fn: drawStory },
-    { id: 'LinkedIn_Feed',    ratios: ['1:1','4:5'],  fn: drawLinkedIn },
-  ];
-
-  // Build job list
-  const jobs = [];
-  for (const copy of S.copies) {
-    for (const creative of S.creatives) {
-      for (const p of placements) {
-        if (p.ratios.includes(creative.ratio)) {
-          const fname = `${creative.version}-Copy${copy.variantName}-${p.id}-${creative.ratio.replace(':','x')}.png`;
-          jobs.push({ copy, creative, p, fname });
-        }
-      }
-    }
-  }
+  const jobs = buildJobs();
 
   if (!jobs.length) {
-    setStatus('No matching combinations — check your image filenames include the ratio (1.1, 4_5, 9.16).', 'err');
+    setStatus('No valid preview combinations were found. Check that the files use supported formats such as 1:1, 4:5, and 9:16.', 'err');
     btn.disabled = false; pw.style.display = 'none'; return;
   }
 
